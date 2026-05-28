@@ -13,11 +13,15 @@ _HOLD_FRAMES = 12
 _STATUS_WINDOW = 20
 _STABILITY_FLIPS_FULL = 6.0
 
-# Trust-ramp on close-range new acquisitions to suppress radar-pop panic brakes.
-# Scales modelProb 0→1 over _NEW_LEAD_TRUST_FRAMES when status flips False→True
-# at dRel below _NEW_LEAD_TRUST_DREL. Long-range acquisitions pass through.
+# Phantom-lead mask: when a newly-acquired close-range lead has low modelProb,
+# it's almost always radar ghost (curb return, road edge, ground bounce).
+# Override status=False in the proxy so MPC ignores it. process_lead in
+# longitudinal_mpc_lib uses dRel/vLead/aLeadK/aLeadTau directly and does NOT
+# weight by modelProb — masking status is the only way to suppress this class.
 _NEW_LEAD_TRUST_FRAMES = 6
 _NEW_LEAD_TRUST_DREL = 20.0
+_PHANTOM_MODELPROB_MAX = 0.5
+_PHANTOM_DREL_MAX = 5.0
 
 
 @dataclass
@@ -37,7 +41,7 @@ class _LeadProxy:
   __slots__ = ('status', 'dRel', 'yRel', 'vRel', 'vLead', 'aLeadK', 'aLeadTau',
                'modelProb', 'aRel', 'fcw')
 
-  def __init__(self, snap: _LeadSnap, modelProb_scale: float = 1.0):
+  def __init__(self, snap: _LeadSnap):
     self.status = True
     self.dRel = snap.dRel
     self.yRel = snap.yRel
@@ -45,9 +49,26 @@ class _LeadProxy:
     self.vLead = snap.vLead
     self.aLeadK = snap.aLeadK
     self.aLeadTau = snap.aLeadTau
-    self.modelProb = snap.modelProb * modelProb_scale
+    self.modelProb = snap.modelProb
     self.aRel = snap.aRel
     self.fcw = snap.fcw
+
+
+class _LeadProxyMasked:
+  __slots__ = ('status', 'dRel', 'yRel', 'vRel', 'vLead', 'aLeadK', 'aLeadTau',
+               'modelProb', 'aRel', 'fcw')
+
+  def __init__(self):
+    self.status = False
+    self.dRel = 0.0
+    self.yRel = 0.0
+    self.vRel = 0.0
+    self.vLead = 0.0
+    self.aLeadK = 0.0
+    self.aLeadTau = 0.0
+    self.modelProb = 0.0
+    self.aRel = 0.0
+    self.fcw = False
 
 
 class _RadarStateProxy:
@@ -73,6 +94,8 @@ class _RadarStateProxy:
 class LeadPersistence:
   """Internal helper. Hold last-known leadOne/leadTwo alive for HOLD_FRAMES
   after a status drop, so the MPC view of radarState ignores brief flicker.
+  Also masks freshly-acquired close-range low-confidence phantom leads so the
+  planner doesn't demand emergency brake on radar ghosts.
   No own param — owner (RadarDistanceController) gates via force_enabled."""
 
   def __init__(self):
@@ -115,7 +138,13 @@ class LeadPersistence:
     one = radarstate.leadOne
     two = radarstate.leadTwo
 
-    if one.status:
+    # Treat phantom leads as if status=False: don't snap them, don't extend
+    # alive counter. Otherwise the hold-alive path re-injects the ghost
+    # for up to _HOLD_FRAMES (~600ms) after the raw status drops.
+    one_valid = bool(one.status) and not self._is_phantom(one)
+    two_valid = bool(two.status) and not self._is_phantom(two)
+
+    if one_valid:
       if not self._prev_one_status and float(one.dRel) < _NEW_LEAD_TRUST_DREL:
         self._new_one_age = 0
       else:
@@ -128,7 +157,7 @@ class LeadPersistence:
     else:
       self._new_one_age = _NEW_LEAD_TRUST_FRAMES
 
-    if two.status:
+    if two_valid:
       if not self._prev_two_status and float(two.dRel) < _NEW_LEAD_TRUST_DREL:
         self._new_two_age = 0
       else:
@@ -141,8 +170,8 @@ class LeadPersistence:
     else:
       self._new_two_age = _NEW_LEAD_TRUST_FRAMES
 
-    self._prev_one_status = bool(one.status)
-    self._prev_two_status = bool(two.status)
+    self._prev_one_status = one_valid
+    self._prev_two_status = two_valid
 
     self._status_hist.append(bool(one.status))
     if len(self._status_hist) >= 5:
@@ -152,6 +181,15 @@ class LeadPersistence:
     else:
       self._stability = 1.0
 
+  @staticmethod
+  def _is_phantom(lead) -> bool:
+    # Close-range lead with low modelProb = radar ghost (curb, road edge, etc).
+    # Persistent low-confidence reads count: if model never agrees, don't trust
+    # radar alone for emergency brake at near-zero range.
+    return (bool(lead.status)
+            and float(lead.modelProb) < _PHANTOM_MODELPROB_MAX
+            and float(lead.dRel) < _PHANTOM_DREL_MAX)
+
   def smooth(self, radarstate, force_enabled: bool = True):
     if not force_enabled or radarstate is None:
       return radarstate
@@ -159,19 +197,15 @@ class LeadPersistence:
     l1 = None
     l2 = None
 
-    if not radarstate.leadOne.status and self._alive_one > 0 and self._last_one is not None:
+    if self._is_phantom(radarstate.leadOne):
+      l1 = _LeadProxyMasked()
+    elif not radarstate.leadOne.status and self._alive_one > 0 and self._last_one is not None:
       l1 = _LeadProxy(self._last_one)
-    elif radarstate.leadOne.status and self._new_one_age < _NEW_LEAD_TRUST_FRAMES \
-        and self._last_one is not None:
-      scale = (self._new_one_age + 1) / _NEW_LEAD_TRUST_FRAMES
-      l1 = _LeadProxy(self._last_one, modelProb_scale=scale)
 
-    if not radarstate.leadTwo.status and self._alive_two > 0 and self._last_two is not None:
+    if self._is_phantom(radarstate.leadTwo):
+      l2 = _LeadProxyMasked()
+    elif not radarstate.leadTwo.status and self._alive_two > 0 and self._last_two is not None:
       l2 = _LeadProxy(self._last_two)
-    elif radarstate.leadTwo.status and self._new_two_age < _NEW_LEAD_TRUST_FRAMES \
-        and self._last_two is not None:
-      scale = (self._new_two_age + 1) / _NEW_LEAD_TRUST_FRAMES
-      l2 = _LeadProxy(self._last_two, modelProb_scale=scale)
 
     if l1 is None and l2 is None:
       return radarstate
