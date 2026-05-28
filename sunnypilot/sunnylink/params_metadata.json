@@ -312,6 +312,10 @@
     "title": "Dynamic Follow Distance",
     "description": "Enable dynamic following distance that adjusts based on speed and driving personality. Uses speed-adaptive smoothing for comfortable transitions."
   },
+  "StopAndGoComfort": {
+    "title": "Stop and Go Comfort",
+    "description": "Adds a small takeoff accel floor once stopping clears, and limits small accel surges near a close lead."
+  },
   "EnableCopyparty": {
     "title": "copyparty Service",
     "description": ""

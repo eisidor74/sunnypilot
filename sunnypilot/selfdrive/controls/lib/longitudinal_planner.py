@@ -21,6 +21,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.sunnypilot.selfdrive.controls.lib.accel_personality.accel_controller import AccelPersonalityController
 from openpilot.sunnypilot.selfdrive.controls.lib.dynamic_personality.dynamic_follow import FollowDistanceController
 from openpilot.sunnypilot.selfdrive.controls.lib.radar_distance.radar_distance import RadarDistanceController
+from openpilot.sunnypilot.selfdrive.controls.lib.stop_and_go.stop_and_go import StopAndGoComfortController
 from opendbc.car.interfaces import ACCEL_MIN
 
 # Output jerk-cap on a_target. Applied via property setter that intercepts all
@@ -42,6 +43,7 @@ class LongitudinalPlannerSP:
     self.accel_controller = AccelPersonalityController()
     self.dynamic_follow = FollowDistanceController()
     self.radar_distance = RadarDistanceController()
+    self.stop_and_go = StopAndGoComfortController()
     self.sm_sp = messaging.SubMaster(['liveTracks'])
     self.scc = SmartCruiseControl()
     self.resolver = SpeedLimitResolver()
@@ -52,6 +54,7 @@ class LongitudinalPlannerSP:
 
     self.output_v_target = 0.
     self._output_a_target = 0.
+    self._stop_and_go_sm = None
 
   @property
   def output_a_target(self) -> float:
@@ -59,9 +62,13 @@ class LongitudinalPlannerSP:
 
   @output_a_target.setter
   def output_a_target(self, value: float) -> None:
+    value = float(value)
+    if self._stop_and_go_sm is not None:
+      value = self.apply_stop_and_go_comfort(self._stop_and_go_sm, value, getattr(self, 'output_should_stop', False))
+
     prev = getattr(self, '_output_a_target', None)
     if prev is None:
-      self._output_a_target = float(value)
+      self._output_a_target = value
       return
     max_down = prev - JERK_IN_MAX * DT_MDL
     max_up = prev + JERK_OUT_MAX * DT_MDL
@@ -132,7 +139,11 @@ class LongitudinalPlannerSP:
   def smooth_radarstate(self, radarstate):
     return self.radar_distance.smooth_radarstate(radarstate)
 
+  def apply_stop_and_go_comfort(self, sm: messaging.SubMaster, a_target: float, should_stop: bool) -> float:
+    return self.stop_and_go.apply(sm, a_target, should_stop)
+
   def update(self, sm: messaging.SubMaster) -> None:
+    self._stop_and_go_sm = sm
     self.events_sp.clear()
     self.dec.update(sm)
     self.e2e_alerts_helper.update(sm, self.events_sp)

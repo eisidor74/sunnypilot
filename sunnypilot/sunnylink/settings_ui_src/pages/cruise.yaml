@@ -62,6 +62,15 @@ sections:
     - $ref: '#/macros/longitudinal'
     enablement:
     - $ref: '#/macros/longitudinal'
+  - key: StopAndGoComfort
+    widget: toggle
+    title: Stop and Go Comfort
+    description: Adds a small takeoff accel floor once stopping clears, and limits small accel surges when following a
+      close lead in crawling traffic. Stop and hard-brake requests still bypass this layer.
+    visibility:
+    - $ref: '#/macros/longitudinal'
+    enablement:
+    - $ref: '#/macros/longitudinal'
   - key: AccelPersonalityEnabled
     widget: toggle
     title: Acceleration Personality

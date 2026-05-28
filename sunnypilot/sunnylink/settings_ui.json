@@ -677,6 +677,26 @@
               ]
             },
             {
+              "key": "StopAndGoComfort",
+              "widget": "toggle",
+              "title": "Stop and Go Comfort",
+              "description": "Adds a small takeoff accel floor once stopping clears, and limits small accel surges when following a close lead in crawling traffic. Stop and hard-brake requests still bypass this layer.",
+              "visibility": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ],
+              "enablement": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
               "key": "AccelPersonalityEnabled",
               "widget": "toggle",
               "title": "Acceleration Personality",
