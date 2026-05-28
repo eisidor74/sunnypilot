@@ -13,6 +13,12 @@ _HOLD_FRAMES = 12
 _STATUS_WINDOW = 20
 _STABILITY_FLIPS_FULL = 6.0
 
+# Trust-ramp on close-range new acquisitions to suppress radar-pop panic brakes.
+# Scales modelProb 0→1 over _NEW_LEAD_TRUST_FRAMES when status flips False→True
+# at dRel below _NEW_LEAD_TRUST_DREL. Long-range acquisitions pass through.
+_NEW_LEAD_TRUST_FRAMES = 6
+_NEW_LEAD_TRUST_DREL = 20.0
+
 
 @dataclass
 class _LeadSnap:
@@ -31,7 +37,7 @@ class _LeadProxy:
   __slots__ = ('status', 'dRel', 'yRel', 'vRel', 'vLead', 'aLeadK', 'aLeadTau',
                'modelProb', 'aRel', 'fcw')
 
-  def __init__(self, snap: _LeadSnap):
+  def __init__(self, snap: _LeadSnap, modelProb_scale: float = 1.0):
     self.status = True
     self.dRel = snap.dRel
     self.yRel = snap.yRel
@@ -39,7 +45,7 @@ class _LeadProxy:
     self.vLead = snap.vLead
     self.aLeadK = snap.aLeadK
     self.aLeadTau = snap.aLeadTau
-    self.modelProb = snap.modelProb
+    self.modelProb = snap.modelProb * modelProb_scale
     self.aRel = snap.aRel
     self.fcw = snap.fcw
 
@@ -78,6 +84,11 @@ class LeadPersistence:
     self._status_hist: deque[bool] = deque(maxlen=_STATUS_WINDOW)
     self._stability = 1.0
 
+    self._new_one_age = _NEW_LEAD_TRUST_FRAMES
+    self._new_two_age = _NEW_LEAD_TRUST_FRAMES
+    self._prev_one_status = False
+    self._prev_two_status = False
+
   @property
   def stability(self) -> float:
     return self._stability
@@ -89,6 +100,10 @@ class LeadPersistence:
     self._alive_two = 0
     self._status_hist.clear()
     self._stability = 1.0
+    self._new_one_age = _NEW_LEAD_TRUST_FRAMES
+    self._new_two_age = _NEW_LEAD_TRUST_FRAMES
+    self._prev_one_status = False
+    self._prev_two_status = False
 
   def update(self, radarstate, force_enabled: bool = True) -> None:
     if radarstate is None:
@@ -101,16 +116,33 @@ class LeadPersistence:
     two = radarstate.leadTwo
 
     if one.status:
+      if not self._prev_one_status and float(one.dRel) < _NEW_LEAD_TRUST_DREL:
+        self._new_one_age = 0
+      else:
+        self._new_one_age = min(_NEW_LEAD_TRUST_FRAMES, self._new_one_age + 1)
       self._last_one = self._snap(one)
       self._alive_one = _HOLD_FRAMES
     elif self._alive_one > 0:
       self._alive_one -= 1
+      self._new_one_age = _NEW_LEAD_TRUST_FRAMES
+    else:
+      self._new_one_age = _NEW_LEAD_TRUST_FRAMES
 
     if two.status:
+      if not self._prev_two_status and float(two.dRel) < _NEW_LEAD_TRUST_DREL:
+        self._new_two_age = 0
+      else:
+        self._new_two_age = min(_NEW_LEAD_TRUST_FRAMES, self._new_two_age + 1)
       self._last_two = self._snap(two)
       self._alive_two = _HOLD_FRAMES
     elif self._alive_two > 0:
       self._alive_two -= 1
+      self._new_two_age = _NEW_LEAD_TRUST_FRAMES
+    else:
+      self._new_two_age = _NEW_LEAD_TRUST_FRAMES
+
+    self._prev_one_status = bool(one.status)
+    self._prev_two_status = bool(two.status)
 
     self._status_hist.append(bool(one.status))
     if len(self._status_hist) >= 5:
@@ -129,9 +161,17 @@ class LeadPersistence:
 
     if not radarstate.leadOne.status and self._alive_one > 0 and self._last_one is not None:
       l1 = _LeadProxy(self._last_one)
+    elif radarstate.leadOne.status and self._new_one_age < _NEW_LEAD_TRUST_FRAMES \
+        and self._last_one is not None:
+      scale = (self._new_one_age + 1) / _NEW_LEAD_TRUST_FRAMES
+      l1 = _LeadProxy(self._last_one, modelProb_scale=scale)
 
     if not radarstate.leadTwo.status and self._alive_two > 0 and self._last_two is not None:
       l2 = _LeadProxy(self._last_two)
+    elif radarstate.leadTwo.status and self._new_two_age < _NEW_LEAD_TRUST_FRAMES \
+        and self._last_two is not None:
+      scale = (self._new_two_age + 1) / _NEW_LEAD_TRUST_FRAMES
+      l2 = _LeadProxy(self._last_two, modelProb_scale=scale)
 
     if l1 is None and l2 is None:
       return radarstate

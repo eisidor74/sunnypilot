@@ -17,10 +17,18 @@ from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.speed_limit_resolve
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 from openpilot.sunnypilot.models.helpers import get_active_bundle
 
+from openpilot.common.realtime import DT_MDL
 from openpilot.sunnypilot.selfdrive.controls.lib.accel_personality.accel_controller import AccelPersonalityController
 from openpilot.sunnypilot.selfdrive.controls.lib.dynamic_personality.dynamic_follow import FollowDistanceController
 from openpilot.sunnypilot.selfdrive.controls.lib.radar_distance.radar_distance import RadarDistanceController
 from opendbc.car.interfaces import ACCEL_MIN
+
+# Output jerk-cap on a_target. Applied via property setter that intercepts all
+# writes to self.output_a_target (including stock's final clip at line 176 of
+# selfdrive/controls/lib/longitudinal_planner.py). Keeps full -3.5 authority but
+# rate-limits steps so MPC can't stab from cruise to max brake in one tick.
+JERK_IN_MAX = 3.5   # m/s^3 — brake building (going more negative)
+JERK_OUT_MAX = 6.0  # m/s^3 — brake releasing (going more positive)
 
 DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimentalControlState
 LongitudinalPlanSource = custom.LongitudinalPlanSP.LongitudinalPlanSource
@@ -43,7 +51,21 @@ class LongitudinalPlannerSP:
     self.e2e_alerts_helper = E2EAlertsHelper()
 
     self.output_v_target = 0.
-    self.output_a_target = 0.
+    self._output_a_target = 0.
+
+  @property
+  def output_a_target(self) -> float:
+    return self._output_a_target
+
+  @output_a_target.setter
+  def output_a_target(self, value: float) -> None:
+    prev = getattr(self, '_output_a_target', None)
+    if prev is None:
+      self._output_a_target = float(value)
+      return
+    max_down = prev - JERK_IN_MAX * DT_MDL
+    max_up = prev + JERK_OUT_MAX * DT_MDL
+    self._output_a_target = float(max(max_down, min(max_up, value)))
 
   def is_e2e(self, sm: messaging.SubMaster) -> bool:
     experimental_mode = sm['selfdriveState'].experimentalMode
@@ -104,8 +126,8 @@ class LongitudinalPlannerSP:
     }
 
     self.source = min(targets, key=lambda k: targets[k][0])
-    self.output_v_target, self.output_a_target = targets[self.source]
-    return self.output_v_target, self.output_a_target
+    self.output_v_target, a_target = targets[self.source]
+    return self.output_v_target, a_target
 
   def smooth_radarstate(self, radarstate):
     return self.radar_distance.smooth_radarstate(radarstate)

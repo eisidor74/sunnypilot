@@ -19,10 +19,16 @@ _DREL_MAX = 180.0
 _YREL_ABS_MAX = 1.6
 
 _VREL_DEADBAND = -1.5
+_VREL_DEADBAND_FAR = -0.5  # softer deadband for far tracks; catches slow closing at large dRel
+_DREL_FAR_THRESH = 80.0    # tracks beyond this use the softer deadband
 _VREL_FULL = -6.0
 _LEADONE_PROB_MIN = 0.85
 
-_V_EGO_MIN = 5.0
+_V_EGO_MIN = 3.0
+# Static clutter filter (parked cars, signs, curbs): only active at low ego speed
+# where bins fill with non-threats. At higher speed, a stationary lead IS a threat.
+_STATIC_FILTER_V_EGO_MAX = 5.0
+_STATIC_VLEAD_ABS = 0.5
 
 _ACTIVATE_FRAMES = 3
 _DECAY_PER_MISS = 2
@@ -194,7 +200,12 @@ class RadarDistanceController:
       if abs(y_rel) > _YREL_ABS_MAX:
         continue
       v_rel = float(t.vRel)
-      if v_rel >= _VREL_DEADBAND:
+      vrel_gate = _VREL_DEADBAND_FAR if d_rel >= _DREL_FAR_THRESH else _VREL_DEADBAND
+      if v_rel >= vrel_gate:
+        continue
+      # Reject stationary clutter at low ego speed only — bins otherwise saturate
+      # with parked cars / signs. At highway speed, stationary lead = real threat.
+      if v_ego < _STATIC_FILTER_V_EGO_MAX and abs(v_rel + v_ego) < _STATIC_VLEAD_ABS:
         continue
 
       key = self._bin(d_rel, v_rel)

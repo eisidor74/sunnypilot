@@ -124,10 +124,10 @@ class TestAleadRateAnticipator:
 
   def test_alead_modifier_gated_on_vrel(self):
     df = _make()
-    # mild aLK, vRel barely closing → modifier should NOT fire
+    # mild aLK, vRel inside gate deadband → modifier should NOT fire
     for _ in range(10):
       lead = FakeLead(a_lead=-0.96)
-      lead.vLead = 19.65  # v_rel = vLead - v_ego = 19.65 - 20 = -0.35
+      lead.vLead = 19.95  # v_rel = vLead - v_ego = 19.95 - 20 = -0.05
       df.update()
       df.get_follow_distance_multiplier(20.0, FakeRadarState(lead))
     assert df._dbg.alead == 0.0
