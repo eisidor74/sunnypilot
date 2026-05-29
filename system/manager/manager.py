@@ -42,6 +42,10 @@ def manager_init() -> None:
   if params.get("DeviceBootMode") == 1:  # start in Always Offroad mode
     params.put_bool("OffroadMode", True)
 
+  # always start in dashcam mode - re-enable via UI each session
+  params.put_bool("OpenpilotEnabledToggle", False)
+
+
   # quick boot
   if params.get_bool("QuickBootToggle") and not PC:
     prebuilt_path = "/data/openpilot/prebuilt"
