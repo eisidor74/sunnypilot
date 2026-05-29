@@ -253,8 +253,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.startupNoControl: {
-    ET.PERMANENT: StartupAlert("Dashcam mode"),
-    ET.NO_ENTRY: NoEntryAlert("Dashcam mode"),
+    ET.PERMANENT: StartupAlert("Dashcam on1"),
+    ET.NO_ENTRY: NoEntryAlert("Dashcam on2"),
   },
 
   EventName.startupNoCar: {
@@ -268,7 +268,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.dashcamMode: {
-    ET.PERMANENT: NormalPermanentAlert("Dashcam Mode",
+    ET.PERMANENT: NormalPermanentAlert("Dashcam on3",
                                        priority=Priority.LOWEST),
   },
 
