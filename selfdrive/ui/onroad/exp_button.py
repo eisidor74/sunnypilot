@@ -10,7 +10,7 @@ class ExpButton(Widget):
   def __init__(self, button_size: int, icon_size: int):
     super().__init__()
     self._params = Params()
-    self._openpilot_enabled: bool = False
+    self._experimental_mode: bool = False
     self._engageable: bool = False
 
     # State hold mechanism
@@ -21,22 +21,22 @@ class ExpButton(Widget):
     self._white_color: rl.Color = rl.Color(255, 255, 255, 255)
     self._black_bg: rl.Color = rl.Color(0, 0, 0, 166)
     self._txt_wheel: rl.Texture = gui_app.texture('icons/chffr_wheel.png', icon_size, icon_size)
-    self._txt_dashcam: rl.Texture = gui_app.texture('icons/camera.png', icon_size, icon_size)
+    self._txt_exp: rl.Texture = gui_app.texture('icons/experimental.png', icon_size, icon_size)
     self._rect = rl.Rectangle(0, 0, button_size, button_size)
 
   def set_rect(self, rect: rl.Rectangle) -> None:
     self._rect.x, self._rect.y = rect.x, rect.y
 
   def _update_state(self) -> None:
-    self._openpilot_enabled = self._params.get_bool("OpenpilotEnabledToggle")
     selfdrive_state = ui_state.sm["selfdriveState"]
+    self._experimental_mode = selfdrive_state.experimentalMode
     self._engageable = selfdrive_state.engageable or selfdrive_state.enabled
 
   def _handle_mouse_release(self, _):
     super()._handle_mouse_release(_)
     if self._is_toggle_allowed():
-      new_mode = not self._openpilot_enabled
-      self._params.put_bool("OpenpilotEnabledToggle", new_mode)
+      new_mode = not self._experimental_mode
+      self._params.put_bool("ExperimentalMode", new_mode)
 
       # Hold new state temporarily
       self._held_mode = new_mode
@@ -48,8 +48,7 @@ class ExpButton(Widget):
 
     self._white_color.a = 180 if self.is_pressed or not self._engageable else 255
 
-    # Show camera icon when sunnypilot is disabled (dashcam mode), wheel icon when enabled
-    texture = self._txt_wheel if self._held_or_actual_mode() else self._txt_dashcam
+    texture = self._txt_exp if self._held_or_actual_mode() else self._txt_wheel
     rl.draw_circle(center_x, center_y, self._rect.width / 2, self._black_bg)
     rl.draw_texture_ex(texture, rl.Vector2(center_x - texture.width / 2, center_y - texture.height / 2), 0.0, 1.0, self._white_color)
 
@@ -61,8 +60,11 @@ class ExpButton(Widget):
     if self._hold_end_time and now >= self._hold_end_time:
       self._hold_end_time = self._held_mode = None
 
-    return self._openpilot_enabled
+    return self._experimental_mode
 
   def _is_toggle_allowed(self):
-    # Allow toggling when car is not engaged (safer than requiring confirmation)
-    return not ui_state.engaged
+    if not self._params.get_bool("ExperimentalModeConfirmed"):
+      return False
+
+    # Mirror exp mode toggle using persistent car params
+    return ui_state.has_longitudinal_control
