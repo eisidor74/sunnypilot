@@ -10,8 +10,7 @@ class ExpButton(Widget):
   def __init__(self, button_size: int, icon_size: int):
     super().__init__()
     self._params = Params()
-    self._openpilot_enabled: bool = False
-    #self._experimental_mode: bool = False
+    self._experimental_mode: bool = False
     self._engageable: bool = False
 
     # State hold mechanism
@@ -28,15 +27,11 @@ class ExpButton(Widget):
   def set_rect(self, rect: rl.Rectangle) -> None:
     self._rect.x, self._rect.y = rect.x, rect.y
 
-  def _update_state(self) -> None:
-    self._openpilot_enabled = self._params.get_bool("OpenpilotEnabledToggle")
-    selfdrive_state = ui_state.sm["selfdriveState"]
-    self._engageable = selfdrive_state.engageable or selfdrive_state.enabled
     
-  #def _update_state(self) -> None:
-  #  selfdrive_state = ui_state.sm["selfdriveState"]
-  #  self._experimental_mode = selfdrive_state.experimentalMode
-  #  self._engageable = selfdrive_state.engageable or selfdrive_state.enabled
+  def _update_state(self) -> None:
+    selfdrive_state = ui_state.sm["selfdriveState"]
+    self._experimental_mode = selfdrive_state.experimentalMode
+    self._engageable = selfdrive_state.engageable or selfdrive_state.enabled
 
   def _handle_mouse_release(self, _):
     super()._handle_mouse_release(_)
@@ -67,14 +62,10 @@ class ExpButton(Widget):
       self._hold_end_time = self._held_mode = None
 
     return self._experimental_mode
-
-  def _is_toggle_allowed(self):
-    # Allow toggling when car is not engaged (safer than requiring confirmation)
-    return not ui_state.engaged
     
-  #def _is_toggle_allowed(self):
-  #  if not self._params.get_bool("ExperimentalModeConfirmed"):
-  #    return False
+  def _is_toggle_allowed(self):
+    if not self._params.get_bool("ExperimentalModeConfirmed"):
+      return False
 
     # Mirror exp mode toggle using persistent car params
     return ui_state.has_longitudinal_control
