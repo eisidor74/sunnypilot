@@ -16,7 +16,7 @@ class ExpButton(Widget):
     # State hold mechanism
     self._hold_duration = 2.0  # seconds
     self._held_mode: bool | None = None
-    self._hold_end_time: float | None = 
+    self._hold_end_time: float | None = None
 
      # Add this for your custom icon toggle
     self._custom_icon_toggle: bool = False
