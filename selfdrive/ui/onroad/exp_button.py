@@ -36,6 +36,8 @@ class ExpButton(Widget):
     new_state = not self._openpilot_enabled
     self._params.put_bool("OpenpilotEnabledToggle", new_state)
     self._openpilot_enabled = new_state
+    # Request onroad cycle to apply the mode switch
+    self._params.put_bool("OnroadCycleRequested", True)
 
   def _render(self, rect: rl.Rectangle) -> None:
     center_x = int(self._rect.x + self._rect.width // 2)
