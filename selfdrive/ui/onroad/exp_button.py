@@ -47,9 +47,9 @@ class ExpButton(Widget):
     #  new_mode = not self._experimental_mode
     #  self._params.put_bool("ExperimentalMode", new_mode)
 
-      # Hold new state temporarily
-      self._held_mode = new_mode
-      self._hold_end_time = time.monotonic() + self._hold_duration
+    # Hold new state temporarily
+    self._held_mode = new_mode
+    self._hold_end_time = time.monotonic() + self._hold_duration
 
   def _render(self, rect: rl.Rectangle) -> None:
     center_x = int(self._rect.x + self._rect.width // 2)
