@@ -41,7 +41,7 @@ class ExpButton(Widget):
     super()._handle_mouse_release(_)
     # Just toggle the custom icon state
     self._custom_icon_toggle = not self._custom_icon_toggle
-    print(f"Icon toggled: {self._custom_icon_toggle}")
+    # print(f"Icon toggled: {self._custom_icon_toggle}")
     
     #if self._is_toggle_allowed():
     #  new_mode = not self._experimental_mode
