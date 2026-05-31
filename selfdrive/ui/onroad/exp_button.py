@@ -14,15 +14,6 @@ class ExpButton(Widget):
     self._engageable: bool = False
     self._openpilot_enabled: bool = False
 
-    # State hold mechanism
-    #self._hold_duration = 2.0  # seconds
-    #self._held_mode: bool | None = None
-    #self._hold_end_time: float | None = None
-
-     # Add this for your custom icon toggle
-    #self._custom_icon_toggle: bool = False
-
-
     self._white_color: rl.Color = rl.Color(255, 255, 255, 255)
     self._black_bg: rl.Color = rl.Color(0, 0, 0, 166)
     self._txt_wheel: rl.Texture = gui_app.texture('icons/chffr_wheel.png', icon_size, icon_size)
@@ -38,58 +29,21 @@ class ExpButton(Widget):
     self._experimental_mode = selfdrive_state.experimentalMode
     self._engageable = selfdrive_state.engageable or selfdrive_state.enabled
     self._openpilot_enabled = self._params.get_bool("OpenpilotEnabledToggle", False)
-    #self._openpilot_enabled = not self._openpilot_enabled (after the put_bool call)
-
-
 
   def _handle_mouse_release(self, _):
     super()._handle_mouse_release(_)
-
     # Toggle the OpenpilotEnabledToggle parameter
     new_state = not self._openpilot_enabled
     self._params.put_bool("OpenpilotEnabledToggle", new_state)
     self._openpilot_enabled = new_state
-    
-    # Just toggle the custom icon state
-    #self._custom_icon_toggle = not self._custom_icon_toggle
-    
-    #if self._is_toggle_allowed():
-    #  new_mode = not self._experimental_mode
-    #  self._params.put_bool("ExperimentalMode", new_mode)
-
-    # Hold new state temporarily
-    # self._held_mode = new_mode
-    # self._hold_end_time = time.monotonic() + self._hold_duration
 
   def _render(self, rect: rl.Rectangle) -> None:
     center_x = int(self._rect.x + self._rect.width // 2)
     center_y = int(self._rect.y + self._rect.height // 2)
+
     self._white_color.a = 180 if self.is_pressed or not self._engageable else 255
+
+    # Show experimental icon if openpilot is enabled, wheel icon otherwise
     texture = self._txt_exp if self._openpilot_enabled else self._txt_wheel
-#    self._white_color.a = 180 if self.is_pressed or not self._engageable else 255
-
-     # Use custom toggle instead of experimental mode
- #   texture = self._txt_exp if self._custom_icon_toggle else self._txt_wheel
- #   rl.draw_circle(center_x, center_y, self._rect.width / 2, self._black_bg)
- #   rl.draw_texture_ex(texture, rl.Vector2(center_x - texture.width / 2, center_y - texture.height / 2), 0.0, 1.0, self._white_color)
-
-    texture = self._txt_exp if self._held_or_actual_mode() else self._txt_wheel
     rl.draw_circle(center_x, center_y, self._rect.width / 2, self._black_bg)
     rl.draw_texture_ex(texture, rl.Vector2(center_x - texture.width / 2, center_y - texture.height / 2), 0.0, 1.0, self._white_color)
-
- # def _held_or_actual_mode(self):
- #   now = time.monotonic()
- #   if self._hold_end_time and now < self._hold_end_time:
- #     return self._held_mode
-
-#    if self._hold_end_time and now >= self._hold_end_time:
-#      self._hold_end_time = self._held_mode = None
-
- #   return self._experimental_mode
-    
-  #def _is_toggle_allowed(self):
-  #  if not self._params.get_bool("ExperimentalModeConfirmed"):
-  #    return False
-
-    # Mirror exp mode toggle using persistent car params
-   # return ui_state.has_longitudinal_control
